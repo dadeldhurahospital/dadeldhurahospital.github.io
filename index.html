@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
   
-  <!-- Firebase SDK -->
+  <!-- Firebase SDK (Required for Cloud Firestore) -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
   
@@ -759,17 +759,22 @@
 
 <script>
   (function() {
-    // ==================== FIREBASE CONFIGURATION ====================
-    // 🔴 REPLACE THIS WITH YOUR FIREBASE CONFIG KEYS 🔴
+    // ============================================================
+    // 🔴 STEP 1: PASTE YOUR FIREBASE CONFIG KEYS BELOW 🔴
+    // ============================================================
     const firebaseConfig = {
-     apiKey: "AIzaSyBjS7KDX5Qk0mUicAdBbELOIU7AQK2gLto",
-     authDomain: "dhims-2c49c.firebaseapp.com",
-     projectId: "dhims-2c49c",
-     storageBucket: "dhims-2c49c.firebasestorage.app",
-     messagingSenderId: "930528304406",
-     appId: "1:930528304406:web:d26f39519513e2ccdcc437",
-     measurementId: "G-J1EP8K3V4V"
-    };
+     // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+
+  apiKey: "AIzaSyBjS7KDX5Qk0mUicAdBbELOIU7AQK2gLto",
+  authDomain: "dhims-2c49c.firebaseapp.com",
+  projectId: "dhims-2c49c",
+  storageBucket: "dhims-2c49c.firebasestorage.app",
+  messagingSenderId: "930528304406",
+  appId: "1:930528304406:web:d26f39519513e2ccdcc437",
+  measurementId: "G-J1EP8K3V4V"
+};
+   
+    // ============================================================
 
     // Initialize Firebase
     firebase.initializeApp(firebaseConfig);
