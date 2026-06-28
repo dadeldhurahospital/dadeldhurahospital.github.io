@@ -3,9 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MediStock · Department Inventory System</title>
+  <title>Dadeldhura Hospital · Inventory Management System</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+  
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -156,7 +161,8 @@
     .header-right {
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 12px;
+      flex-wrap: wrap;
     }
     .user-badge {
       background: #eef2ff;
@@ -166,6 +172,27 @@
       font-size: 14px;
       color: #1e3a8a;
     }
+    .admin-badge {
+      background: #fef9c3;
+      padding: 8px 16px;
+      border-radius: 40px;
+      font-weight: 600;
+      font-size: 14px;
+      color: #854d0e;
+    }
+    .btn-change-password {
+      background: #e0f2fe;
+      border: 1px solid #bae6fd;
+      color: #0369a1;
+      padding: 8px 20px;
+      border-radius: 40px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: 0.15s;
+      font-family: 'Inter', sans-serif;
+    }
+    .btn-change-password:hover { background: #bae6fd; }
     .stats-badge {
       display: flex;
       align-items: center;
@@ -524,15 +551,23 @@
 <div id="loginPage" class="login-container">
   <div class="login-header">
     <i class="fas fa-hospital"></i>
-    <h1>MediStock</h1>
-    <p>Department Inventory System</p>
+    <h1>Dadeldhura Hospital</h1>
+    <p>Inventory Management System</p>
   </div>
   <form class="login-form" id="loginForm">
     <div class="login-error" id="loginError">Invalid credentials. Please try again.</div>
     <div>
-      <label>Select Department</label>
+      <label>Select Department / Role</label>
       <select id="loginDepartment" required>
-        <option value="">— Choose your department —</option>
+        <option value="">— Choose your role —</option>
+        <option value="Admin">👑 Admin (View Only)</option>
+        <option value="Insurance/SSU">🛡️ Insurance / SSU</option>
+        <option value="Cash">💰 Cash</option>
+        <option value="OPD">🚑 OPD</option>
+        <option value="IPD">🏥 IPD</option>
+        <option value="Collection">📋 Collection</option>
+        <option value="Hemodialysis">🩸 Hemodialysis</option>
+        <option value="Store">📦 Store</option>
         <option value="Emergency">🟥 Emergency</option>
         <option value="ICU">🟨 ICU</option>
         <option value="Pharmacy">🟩 Pharmacy</option>
@@ -540,12 +575,11 @@
         <option value="Radiology">🟦 Radiology</option>
         <option value="Ward">🟧 Ward</option>
         <option value="Surgery">🟦 Surgery</option>
-        <option value="Admin">⬜ Admin</option>
       </select>
     </div>
     <div>
       <label>Password</label>
-      <input type="password" id="loginPassword" placeholder="Enter department password" required>
+      <input type="password" id="loginPassword" placeholder="Enter password" required>
     </div>
     <button type="submit" class="btn-login">Login</button>
   </form>
@@ -556,10 +590,11 @@
   <div class="header">
     <div class="header-left">
       <i class="fas fa-hospital"></i>
-      <h1>MediStock <span>· department-wise</span></h1>
+      <h1>Dadeldhura Hospital <span>· Inventory Management</span></h1>
     </div>
     <div class="header-right">
       <span class="user-badge" id="userBadge">Emergency</span>
+      <button class="btn-change-password" id="openChangePasswordModal"><i class="fas fa-key"></i> Change Password</button>
       <button class="btn-logout" id="logoutBtn"><i class="fas fa-sign-out-alt"></i> Logout</button>
     </div>
   </div>
@@ -600,11 +635,11 @@
   <div id="departmentContainer"></div>
 
   <div class="footer-note">
-    <i class="fas fa-shield-alt" style="margin-right: 6px; color:#2563eb;"></i> Department-wise inventory · <span id="updateTime">just now</span>
+    <i class="fas fa-shield-alt" style="margin-right: 6px; color:#2563eb;"></i> Dadeldhura Hospital Inventory · <span id="updateTime">just now</span>
   </div>
 </div>
 
-<!-- ==================== MODAL WITH SCROLL ==================== -->
+<!-- ==================== ITEM MODAL ==================== -->
 <div class="modal-overlay" id="itemModal">
   <div class="modal-card">
     <h2><i class="fas fa-pen-to-square"></i> <span id="modalTitle">Add item</span></h2>
@@ -642,6 +677,13 @@
             <option value="Radiology">Radiology</option>
             <option value="Ward">Ward</option>
             <option value="Surgery">Surgery</option>
+            <option value="Insurance/SSU">Insurance / SSU</option>
+            <option value="Cash">Cash</option>
+            <option value="OPD">OPD</option>
+            <option value="IPD">IPD</option>
+            <option value="Collection">Collection</option>
+            <option value="Hemodialysis">Hemodialysis</option>
+            <option value="Store">Store</option>
             <option value="Admin">Admin</option>
           </select>
         </div>
@@ -683,111 +725,120 @@
   </div>
 </div>
 
+<!-- ==================== CHANGE PASSWORD MODAL ==================== -->
+<div class="modal-overlay" id="changePasswordModal">
+  <div class="modal-card">
+    <h2><i class="fas fa-key"></i> Change Password</h2>
+    
+    <div class="modal-form-scroll">
+      <form class="modal-form" id="changePasswordForm">
+        <div>
+          <label>Current Password</label>
+          <input type="password" id="currentPassword" placeholder="Enter current password" required>
+        </div>
+        <div>
+          <label>New Password</label>
+          <input type="password" id="newPassword" placeholder="Enter new password" required>
+        </div>
+        <div>
+          <label>Confirm New Password</label>
+          <input type="password" id="confirmPassword" placeholder="Confirm new password" required>
+        </div>
+        
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" id="closeChangePasswordBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="savePasswordBtn"><i class="fas fa-save"></i> Update Password</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <!-- ==================== TOAST ==================== -->
 <div class="toast" id="toast"><i class="fas fa-check-circle"></i> <span id="toastMessage">Item saved</span></div>
 
 <script>
   (function() {
-    // ==================== DEPARTMENTS & PASSWORDS ====================
-    const DEPARTMENTS = {
-      'Emergency': { password: 'emergency123', icon: 'fa-truck-medical' },
-      'ICU': { password: 'icu123', icon: 'fa-bed' },
-      'Pharmacy': { password: 'pharmacy123', icon: 'fa-prescription-bottle' },
-      'Laboratory': { password: 'lab123', icon: 'fa-flask' },
-      'Radiology': { password: 'radiology123', icon: 'fa-x-ray' },
-      'Ward': { password: 'ward123', icon: 'fa-hospital-user' },
-      'Surgery': { password: 'surgery123', icon: 'fa-scalpel' },
-      'Admin': { password: 'admin123', icon: 'fa-user-tie' }
+    // ==================== FIREBASE CONFIGURATION ====================
+    // 🔴 REPLACE THIS WITH YOUR FIREBASE CONFIG KEYS 🔴
+    const firebaseConfig = {
+     apiKey: "AIzaSyBjS7KDX5Qk0mUicAdBbELOIU7AQK2gLto",
+     authDomain: "dhims-2c49c.firebaseapp.com",
+     projectId: "dhims-2c49c",
+     storageBucket: "dhims-2c49c.firebasestorage.app",
+     messagingSenderId: "930528304406",
+     appId: "1:930528304406:web:d26f39519513e2ccdcc437",
+     measurementId: "G-J1EP8K3V4V"
     };
 
-    // ==================== INVENTORY DATA ====================
-    // Default data
-    const defaultInventory = [
-      // Emergency Department
-      { id: 1, code: 'EM-001', name: 'Surgical mask (box)', category: 'Personal Protective', department: 'Emergency', quantity: 45, cost: 150.00, responsible: 'Dr. Sarah Chen', condition: 'New', alertLevel: 10 },
-      { id: 2, code: 'EM-002', name: 'Blood pressure monitor', category: 'Diagnostic', department: 'Emergency', quantity: 6, cost: 2500.00, responsible: 'Dr. Sarah Chen', condition: 'New', alertLevel: 5 },
-      { id: 3, code: 'EM-003', name: 'Thermometer (digital)', category: 'Diagnostic', department: 'Emergency', quantity: 14, cost: 320.00, responsible: 'Dr. Sarah Chen', condition: 'New', alertLevel: 8 },
-      { id: 4, code: 'EM-004', name: 'Stethoscope', category: 'Diagnostic', department: 'Emergency', quantity: 8, cost: 1800.00, responsible: 'Dr. Sarah Chen', condition: 'Good', alertLevel: 5 },
-      { id: 5, code: 'EM-005', name: 'Suture kit', category: 'Surgical', department: 'Emergency', quantity: 20, cost: 450.00, responsible: 'Dr. Sarah Chen', condition: 'New', alertLevel: 10 },
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
 
-      // ICU Department
-      { id: 6, code: 'ICU-001', name: 'Latex gloves (box)', category: 'Personal Protective', department: 'ICU', quantity: 12, cost: 85.50, responsible: 'Nurse Mike Johnson', condition: 'Good', alertLevel: 15 },
-      { id: 7, code: 'ICU-002', name: 'N95 respirators', category: 'Personal Protective', department: 'ICU', quantity: 2, cost: 180.00, responsible: 'Nurse Mike Johnson', condition: 'New', alertLevel: 10 },
-      { id: 8, code: 'ICU-003', name: 'Oxygen mask', category: 'Diagnostic', department: 'ICU', quantity: 9, cost: 180.00, responsible: 'Nurse Mike Johnson', condition: 'Repair', alertLevel: 12 },
-      { id: 9, code: 'ICU-004', name: 'Ventilator tubing', category: 'Diagnostic', department: 'ICU', quantity: 4, cost: 1200.00, responsible: 'Nurse Mike Johnson', condition: 'Good', alertLevel: 6 },
-      { id: 10, code: 'ICU-005', name: 'ECG monitor', category: 'Diagnostic', department: 'ICU', quantity: 3, cost: 4500.00, responsible: 'Nurse Mike Johnson', condition: 'New', alertLevel: 4 },
-
-      // Pharmacy Department
-      { id: 11, code: 'PH-001', name: 'Paracetamol 500mg (100 tabs)', category: 'Medication', department: 'Pharmacy', quantity: 3, cost: 45.00, responsible: 'Pharmacist John Doe', condition: 'Good', alertLevel: 10 },
-      { id: 12, code: 'PH-002', name: 'Amoxicillin 250mg (capsules)', category: 'Medication', department: 'Pharmacy', quantity: 5, cost: 120.00, responsible: 'Pharmacist John Doe', condition: 'New', alertLevel: 8 },
-      { id: 13, code: 'PH-003', name: 'Insulin vials', category: 'Medication', department: 'Pharmacy', quantity: 8, cost: 350.00, responsible: 'Pharmacist John Doe', condition: 'Good', alertLevel: 6 },
-      { id: 14, code: 'PH-004', name: 'Saline solution (500ml)', category: 'Medication', department: 'Pharmacy', quantity: 15, cost: 80.00, responsible: 'Pharmacist John Doe', condition: 'New', alertLevel: 12 },
-      { id: 15, code: 'PH-005', name: 'Antibiotic ointment', category: 'Medication', department: 'Pharmacy', quantity: 6, cost: 65.00, responsible: 'Pharmacist John Doe', condition: 'Good', alertLevel: 5 },
-
-      // Laboratory Department
-      { id: 16, code: 'LB-001', name: 'Sharps container', category: 'Consumable', department: 'Laboratory', quantity: 11, cost: 75.00, responsible: 'Lab Manager Anna', condition: 'Good', alertLevel: 8 },
-      { id: 17, code: 'LB-002', name: 'Microscope slides (box)', category: 'Consumable', department: 'Laboratory', quantity: 25, cost: 120.00, responsible: 'Lab Manager Anna', condition: 'New', alertLevel: 10 },
-      { id: 18, code: 'LB-003', name: 'Test tubes (pack)', category: 'Consumable', department: 'Laboratory', quantity: 18, cost: 90.00, responsible: 'Lab Manager Anna', condition: 'Good', alertLevel: 8 },
-      { id: 19, code: 'LB-004', name: 'Centrifuge tubes', category: 'Consumable', department: 'Laboratory', quantity: 30, cost: 60.00, responsible: 'Lab Manager Anna', condition: 'New', alertLevel: 12 },
-      { id: 20, code: 'LB-005', name: 'Pipette tips (box)', category: 'Consumable', department: 'Laboratory', quantity: 22, cost: 45.00, responsible: 'Lab Manager Anna', condition: 'Fair', alertLevel: 8 },
-
-      // Radiology Department
-      { id: 21, code: 'RD-001', name: 'ECG electrodes (box)', category: 'Diagnostic', department: 'Radiology', quantity: 4, cost: 450.00, responsible: 'Tech. David Kim', condition: 'Repair', alertLevel: 6 },
-      { id: 22, code: 'RD-002', name: 'X-ray films (pack)', category: 'Diagnostic', department: 'Radiology', quantity: 10, cost: 250.00, responsible: 'Tech. David Kim', condition: 'Good', alertLevel: 8 },
-      { id: 23, code: 'RD-003', name: 'Ultrasound gel', category: 'Consumable', department: 'Radiology', quantity: 6, cost: 150.00, responsible: 'Tech. David Kim', condition: 'New', alertLevel: 5 },
-      { id: 24, code: 'RD-004', name: 'MRI contrast agent', category: 'Medication', department: 'Radiology', quantity: 2, cost: 2000.00, responsible: 'Tech. David Kim', condition: 'Good', alertLevel: 4 },
-
-      // Ward Department
-      { id: 25, code: 'WD-001', name: 'Hospital bed', category: 'Furniture', department: 'Ward', quantity: 8, cost: 15000.00, responsible: 'Ward Manager Lisa', condition: 'Fair', alertLevel: 5 },
-      { id: 26, code: 'WD-002', name: 'IV fluid (500ml)', category: 'Medication', department: 'Ward', quantity: 7, cost: 120.00, responsible: 'Ward Manager Lisa', condition: 'Good', alertLevel: 10 },
-      { id: 27, code: 'WD-003', name: 'Bedside commode', category: 'Furniture', department: 'Ward', quantity: 4, cost: 2500.00, responsible: 'Ward Manager Lisa', condition: 'Good', alertLevel: 5 },
-      { id: 28, code: 'WD-004', name: 'Patient gowns (pack)', category: 'Consumable', department: 'Ward', quantity: 20, cost: 85.00, responsible: 'Ward Manager Lisa', condition: 'New', alertLevel: 10 },
-      { id: 29, code: 'WD-005', name: 'Bandages (roll)', category: 'Consumable', department: 'Ward', quantity: 15, cost: 35.00, responsible: 'Ward Manager Lisa', condition: 'Good', alertLevel: 10 },
-
-      // Surgery Department
-      { id: 30, code: 'SR-001', name: 'Gauze 4x4 (pack)', category: 'Surgical', department: 'Surgery', quantity: 28, cost: 60.00, responsible: 'Dr. Robert Lee', condition: 'Good', alertLevel: 20 },
-      { id: 31, code: 'SR-002', name: 'Surgical suture (pack)', category: 'Surgical', department: 'Surgery', quantity: 5, cost: 200.00, responsible: 'Dr. Robert Lee', condition: 'New', alertLevel: 10 },
-      { id: 32, code: 'SR-003', name: 'Scalpel blades (box)', category: 'Surgical', department: 'Surgery', quantity: 12, cost: 150.00, responsible: 'Dr. Robert Lee', condition: 'New', alertLevel: 8 },
-      { id: 33, code: 'SR-004', name: 'Surgical gloves (box)', category: 'Personal Protective', department: 'Surgery', quantity: 6, cost: 120.00, responsible: 'Dr. Robert Lee', condition: 'Good', alertLevel: 6 },
-      { id: 34, code: 'SR-005', name: 'Anesthesia supplies', category: 'Medication', department: 'Surgery', quantity: 3, cost: 800.00, responsible: 'Dr. Robert Lee', condition: 'New', alertLevel: 5 },
-
-      // Admin Department
-      { id: 35, code: 'AD-001', name: 'Wheelchair', category: 'Furniture', department: 'Admin', quantity: 2, cost: 8500.00, responsible: 'Admin Officer Jane', condition: 'Poor', alertLevel: 3 },
-      { id: 36, code: 'AD-002', name: 'Office desk', category: 'Furniture', department: 'Admin', quantity: 5, cost: 3500.00, responsible: 'Admin Officer Jane', condition: 'Good', alertLevel: 5 },
-      { id: 37, code: 'AD-003', name: 'File cabinets', category: 'Furniture', department: 'Admin', quantity: 3, cost: 2800.00, responsible: 'Admin Officer Jane', condition: 'Fair', alertLevel: 4 },
-      { id: 38, code: 'AD-004', name: 'Printer paper (ream)', category: 'Consumable', department: 'Admin', quantity: 10, cost: 250.00, responsible: 'Admin Officer Jane', condition: 'New', alertLevel: 6 },
-    ];
-
-    // ==================== LOCALSTORAGE FUNCTIONS ====================
-    function loadInventory() {
-      const saved = localStorage.getItem('medistock_inventory');
+    // ==================== DEPARTMENTS & PASSWORDS ====================
+    // Load passwords from localStorage or use defaults
+    function getPasswords() {
+      const saved = localStorage.getItem('dadeldhura_passwords');
       if (saved) {
         try {
           return JSON.parse(saved);
         } catch (e) {
-          return defaultInventory;
+          return getDefaultPasswords();
         }
       }
-      return defaultInventory;
+      return getDefaultPasswords();
     }
 
-    function saveInventory(data) {
-      localStorage.setItem('medistock_inventory', JSON.stringify(data));
+    function getDefaultPasswords() {
+      return {
+        'Admin': 'admin123',
+        'Insurance/SSU': 'insurance123',
+        'Cash': 'cash123',
+        'OPD': 'opd123',
+        'IPD': 'ipd123',
+        'Collection': 'collection123',
+        'Hemodialysis': 'hemodialysis123',
+        'Store': 'store123',
+        'Emergency': 'emergency123',
+        'ICU': 'icu123',
+        'Pharmacy': 'pharmacy123',
+        'Laboratory': 'lab123',
+        'Radiology': 'radiology123',
+        'Ward': 'ward123',
+        'Surgery': 'surgery123'
+      };
     }
 
-    // Load inventory from localStorage
-    let inventory = loadInventory();
-    
-    // Calculate nextId based on existing data
-    function getNextId() {
-      if (inventory.length === 0) return 200;
-      const maxId = Math.max(...inventory.map(item => item.id));
-      return maxId + 1;
+    function savePasswords(passwords) {
+      localStorage.setItem('dadeldhura_passwords', JSON.stringify(passwords));
     }
-    let nextId = getNextId();
+
+    let passwordStore = getPasswords();
+
+    // Department icons
+    const DEPT_ICONS = {
+      'Admin': 'fa-crown',
+      'Insurance/SSU': 'fa-shield',
+      'Cash': 'fa-coins',
+      'OPD': 'fa-ambulance',
+      'IPD': 'fa-hospital',
+      'Collection': 'fa-clipboard-list',
+      'Hemodialysis': 'fa-droplet',
+      'Store': 'fa-warehouse',
+      'Emergency': 'fa-truck-medical',
+      'ICU': 'fa-bed',
+      'Pharmacy': 'fa-prescription-bottle',
+      'Laboratory': 'fa-flask',
+      'Radiology': 'fa-x-ray',
+      'Ward': 'fa-hospital-user',
+      'Surgery': 'fa-scalpel'
+    };
 
     // ==================== STATE ====================
     let currentUser = null;
+    let isAdmin = false;
+    let inventory = [];
+    let unsubscribe = null;
 
     // DOM refs
     const loginPage = document.getElementById('loginPage');
@@ -806,7 +857,7 @@
     const stockFilter = document.getElementById('stockFilter');
     const resetFilterBtn = document.getElementById('resetFilterBtn');
 
-    const modal = document.getElementById('itemModal');
+    const itemModal = document.getElementById('itemModal');
     const modalTitle = document.getElementById('modalTitle');
     const itemIdField = document.getElementById('itemIdField');
     const itemCode = document.getElementById('itemCode');
@@ -821,6 +872,15 @@
     const closeModalBtn = document.getElementById('closeModalBtn');
     const openAddBtn = document.getElementById('openAddModal');
     const itemForm = document.getElementById('itemForm');
+
+    // Change Password DOM refs
+    const changePasswordModal = document.getElementById('changePasswordModal');
+    const openChangePasswordBtn = document.getElementById('openChangePasswordBtn');
+    const closeChangePasswordBtn = document.getElementById('closeChangePasswordBtn');
+    const changePasswordForm = document.getElementById('changePasswordForm');
+    const currentPasswordInput = document.getElementById('currentPassword');
+    const newPasswordInput = document.getElementById('newPassword');
+    const confirmPasswordInput = document.getElementById('confirmPassword');
 
     const toast = document.getElementById('toast');
     const toastMsg = document.getElementById('toastMessage');
@@ -863,18 +923,112 @@
       return `<span class="condition-badge ${cls}">${condition}</span>`;
     }
 
+    // ==================== FIREBASE DATA FUNCTIONS ====================
+    
+    function loadDataFromFirebase() {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+      
+      unsubscribe = db.collection("inventory")
+        .onSnapshot((snapshot) => {
+          inventory = [];
+          snapshot.forEach((doc) => {
+            inventory.push({
+              id: doc.id,
+              ...doc.data()
+            });
+          });
+          
+          if (currentUser) {
+            render();
+          }
+        }, (error) => {
+          console.error("Error loading data:", error);
+          showToast("❌ Error loading data from server", 'fa-circle-exclamation', true);
+        });
+    }
+
+    async function addItemToFirebase(item) {
+      try {
+        await db.collection("inventory").add({
+          code: item.code,
+          name: item.name,
+          category: item.category,
+          department: item.department,
+          quantity: Number(item.quantity),
+          cost: Number(item.cost),
+          responsible: item.responsible,
+          condition: item.condition,
+          alertLevel: Number(item.alertLevel)
+        });
+        showToast(`➕ ${item.name} (${item.code}) added to ${item.department}`, 'fa-circle-plus');
+      } catch (error) {
+        console.error("Error adding item:", error);
+        showToast("❌ Failed to add item", 'fa-circle-exclamation', true);
+      }
+    }
+
+    async function updateItemInFirebase(id, item) {
+      try {
+        await db.collection("inventory").doc(id).update({
+          code: item.code,
+          name: item.name,
+          category: item.category,
+          department: item.department,
+          quantity: Number(item.quantity),
+          cost: Number(item.cost),
+          responsible: item.responsible,
+          condition: item.condition,
+          alertLevel: Number(item.alertLevel)
+        });
+        showToast(`✏️ ${item.name} updated`, 'fa-pen-to-square');
+      } catch (error) {
+        console.error("Error updating item:", error);
+        showToast("❌ Failed to update item", 'fa-circle-exclamation', true);
+      }
+    }
+
+    async function deleteItemFromFirebase(id) {
+      try {
+        await db.collection("inventory").doc(id).delete();
+        showToast(`🗑️ Item removed successfully`, 'fa-trash-can');
+      } catch (error) {
+        console.error("Error deleting item:", error);
+        showToast("❌ Failed to delete item", 'fa-circle-exclamation', true);
+      }
+    }
+
     // ==================== LOGIN / LOGOUT ====================
     function login(department) {
       currentUser = department;
+      isAdmin = (department === 'Admin');
       loginPage.style.display = 'none';
       dashboard.classList.add('active');
-      userBadge.textContent = department;
-      render();
-      showToast(`✅ Logged in as ${department}`, 'fa-check-circle');
+      
+      if (isAdmin) {
+        userBadge.className = 'admin-badge';
+        userBadge.textContent = '👑 Admin (View Only)';
+        // Hide action buttons for Admin
+        document.querySelector('.actions').style.display = 'none';
+      } else {
+        userBadge.className = 'user-badge';
+        userBadge.textContent = department;
+        // Show action buttons for department staff
+        document.querySelector('.actions').style.display = 'flex';
+      }
+      
+      loadDataFromFirebase();
+      showToast(`✅ Logged in as ${isAdmin ? 'Admin (View Only)' : department}`, 'fa-check-circle');
     }
 
     function logout() {
       currentUser = null;
+      isAdmin = false;
+      if (unsubscribe) {
+        unsubscribe();
+        unsubscribe = null;
+      }
       loginPage.style.display = 'block';
       dashboard.classList.remove('active');
       loginForm.reset();
@@ -888,13 +1042,12 @@
       const password = loginPassword.value.trim();
 
       if (!dept) {
-        loginError.textContent = 'Please select a department.';
+        loginError.textContent = 'Please select a department or Admin.';
         loginError.style.display = 'block';
         return;
       }
 
-      const deptData = DEPARTMENTS[dept];
-      if (deptData && deptData.password === password) {
+      if (passwordStore[dept] && passwordStore[dept] === password) {
         loginError.style.display = 'none';
         login(dept);
       } else {
@@ -906,6 +1059,55 @@
 
     logoutBtn.addEventListener('click', logout);
 
+    // ==================== CHANGE PASSWORD FUNCTIONALITY ====================
+    function openChangePassword() {
+      changePasswordForm.reset();
+      changePasswordModal.classList.add('active');
+    }
+
+    function closeChangePassword() {
+      changePasswordModal.classList.remove('active');
+    }
+
+    openChangePasswordBtn.addEventListener('click', openChangePassword);
+    closeChangePasswordBtn.addEventListener('click', closeChangePassword);
+    changePasswordModal.addEventListener('click', (e) => {
+      if (e.target === changePasswordModal) closeChangePassword();
+    });
+
+    changePasswordForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      
+      const currentPassword = currentPasswordInput.value.trim();
+      const newPassword = newPasswordInput.value.trim();
+      const confirmPassword = confirmPasswordInput.value.trim();
+
+      // Check if current password is correct
+      if (passwordStore[currentUser] !== currentPassword) {
+        showToast('❌ Current password is incorrect', 'fa-circle-exclamation', true);
+        return;
+      }
+
+      // Check if new password is empty
+      if (newPassword.length === 0) {
+        showToast('❌ New password cannot be empty', 'fa-circle-exclamation', true);
+        return;
+      }
+
+      // Check if passwords match
+      if (newPassword !== confirmPassword) {
+        showToast('❌ New passwords do not match', 'fa-circle-exclamation', true);
+        return;
+      }
+
+      // Update password
+      passwordStore[currentUser] = newPassword;
+      savePasswords(passwordStore);
+      
+      showToast(`✅ Password changed successfully for ${currentUser}`, 'fa-key');
+      closeChangePassword();
+    });
+
     // ==================== RENDER ====================
     function render() {
       if (!currentUser) return;
@@ -915,7 +1117,9 @@
       const stock = stockFilter.value;
 
       let filteredItems = inventory.filter(item => {
-        if (item.department !== currentUser) return false;
+        // Admin sees ALL items, others see only their department
+        if (!isAdmin && item.department !== currentUser) return false;
+        
         if (searchTerm) {
           const match = item.name.toLowerCase().includes(searchTerm) ||
                          item.category.toLowerCase().includes(searchTerm) ||
@@ -933,9 +1137,10 @@
         return true;
       });
 
-      const deptItems = inventory.filter(i => i.department === currentUser);
-      totalSpan.textContent = deptItems.length;
-      const lowCount = deptItems.filter(i => {
+      // Stats: Admin sees all items, others see only their department
+      const visibleItems = isAdmin ? inventory : inventory.filter(i => i.department === currentUser);
+      totalSpan.textContent = visibleItems.length;
+      const lowCount = visibleItems.filter(i => {
         const s = getStockStatus(i.quantity, i.alertLevel);
         return s === 'low' || s === 'critical';
       }).length;
@@ -955,7 +1160,7 @@
         deptContainer.innerHTML = `
           <div style="text-align:center; padding: 60px 20px; color:#94a3b8;">
             <i class="fas fa-box-open" style="font-size:48px; margin-bottom:16px; display:block;"></i>
-            No items found in ${currentUser} department
+            No items found${!isAdmin ? ` in ${currentUser} department` : ''}
           </div>
         `;
         document.getElementById('updateTime').textContent = new Date().toLocaleTimeString();
@@ -971,7 +1176,7 @@
           return s === 'low' || s === 'critical';
         }).length;
 
-        let deptIcon = DEPARTMENTS[dept]?.icon || 'fa-building';
+        let deptIcon = DEPT_ICONS[dept] || 'fa-building';
 
         html += `
           <div class="dept-section">
@@ -1004,6 +1209,17 @@
         items.forEach(item => {
           const statusHtml = statusLabel(item.quantity, item.alertLevel);
           const conditionHtml = conditionLabel(item.condition);
+          
+          // Hide action buttons for Admin
+          const actionButtons = isAdmin ? '' : `
+            <div class="action-icons">
+              <i class="fas fa-pen-to-square edit-item" data-id="${item.id}" title="Edit" style="font-size:18px;"></i>
+              <button class="btn-remove delete-item" data-id="${item.id}">
+                <i class="fas fa-trash-can"></i> Remove
+              </button>
+            </div>
+          `;
+          
           html += `
             <tr class="item-row">
               <td><span style="background:#f1f5f9; padding:4px 10px; border-radius:30px; font-weight:500; font-size:12px;">${item.code}</span></td>
@@ -1016,12 +1232,7 @@
               <td><span style="background:#f1f5f9; padding:4px 10px; border-radius:30px; font-weight:500; font-size:12px;">below ${item.alertLevel}</span></td>
               <td>${statusHtml}</td>
               <td style="text-align:center;">
-                <div class="action-icons">
-                  <i class="fas fa-pen-to-square edit-item" data-id="${item.id}" title="Edit" style="font-size:18px;"></i>
-                  <button class="btn-remove delete-item" data-id="${item.id}">
-                    <i class="fas fa-trash-can"></i> Remove
-                  </button>
-                </div>
+                ${actionButtons}
               </td>
             </tr>
           `;
@@ -1039,14 +1250,21 @@
       document.getElementById('updateTime').textContent = new Date().toLocaleTimeString();
     }
 
-    // ==================== CRUD ====================
+    // ==================== CRUD (Only for non-Admin) ====================
     function addItem(code, name, category, department, quantity, cost, responsible, condition, alertLevel) {
+      // Admin cannot add items
+      if (isAdmin) {
+        showToast('❌ Admin cannot add items!', 'fa-circle-exclamation', true);
+        return;
+      }
+      
+      // Department staff can only add to their own department
       if (department !== currentUser) {
         showToast('❌ You can only add items to your own department!', 'fa-circle-exclamation', true);
         return;
       }
-      const newItem = { 
-        id: nextId++, 
+      
+      const newItem = {
         code,
         name, 
         category, 
@@ -1057,30 +1275,27 @@
         condition,
         alertLevel: Number(alertLevel)
       };
-      inventory.push(newItem);
-      saveInventory(inventory); // Save to localStorage
       
-      // Force a full re-render
-      render();
-      
-      // Force the table to refresh by clearing and re-rendering
-      showToast(`➕ ${name} (${code}) added to ${department}`, 'fa-circle-plus');
+      addItemToFirebase(newItem);
     }
 
     function updateItem(id, code, name, category, department, quantity, cost, responsible, condition, alertLevel) {
-      const index = inventory.findIndex(item => item.id === id);
-      if (index === -1) return false;
-      const existing = inventory[index];
-      if (existing.department !== currentUser) {
+      // Admin cannot edit items
+      if (isAdmin) {
+        showToast('❌ Admin cannot edit items!', 'fa-circle-exclamation', true);
+        return false;
+      }
+      
+      const item = inventory.find(i => i.id === id);
+      if (!item) return false;
+      
+      // Department staff can only edit their own department
+      if (item.department !== currentUser) {
         showToast('❌ You can only edit items in your own department!', 'fa-circle-exclamation', true);
         return false;
       }
-      if (department !== currentUser) {
-        showToast('❌ You cannot move items to another department!', 'fa-circle-exclamation', true);
-        return false;
-      }
-      inventory[index] = { 
-        ...existing, 
+      
+      const updatedItem = {
         code,
         name, 
         category, 
@@ -1091,35 +1306,40 @@
         condition,
         alertLevel: Number(alertLevel)
       };
-      saveInventory(inventory); // Save to localStorage
       
-      // Force a full re-render
-      render();
-      
-      showToast(`✏️ ${name} updated`, 'fa-pen-to-square');
+      updateItemInFirebase(id, updatedItem);
       return true;
     }
 
     function deleteItem(id) {
+      // Admin cannot delete items
+      if (isAdmin) {
+        showToast('❌ Admin cannot delete items!', 'fa-circle-exclamation', true);
+        return;
+      }
+      
       const item = inventory.find(i => i.id === id);
       if (!item) return;
+      
+      // Department staff can only delete their own department
       if (item.department !== currentUser) {
         showToast('❌ You can only delete items in your own department!', 'fa-circle-exclamation', true);
         return;
       }
+      
       if (confirm(`Are you sure you want to remove "${item.name}" (${item.code}) from ${item.department}?`)) {
-        inventory = inventory.filter(i => i.id !== id);
-        saveInventory(inventory); // Save to localStorage
-        
-        // Force a full re-render
-        render();
-        
-        showToast(`🗑️ "${item.name}" removed successfully`, 'fa-trash-can');
+        deleteItemFromFirebase(id);
       }
     }
 
     // ==================== EVENTS ====================
     openAddBtn.addEventListener('click', () => {
+      // Admin cannot open Add modal
+      if (isAdmin) {
+        showToast('❌ Admin cannot add items!', 'fa-circle-exclamation', true);
+        return;
+      }
+      
       modalTitle.textContent = 'Add new item';
       itemIdField.value = '';
       itemForm.reset();
@@ -1128,15 +1348,15 @@
       itemDepartment.disabled = true;
       itemCondition.value = 'New';
       itemAlertLevel.value = 10;
-      modal.classList.add('active');
+      itemModal.classList.add('active');
     });
 
-    function closeModal() { 
-      modal.classList.remove('active');
+    function closeItemModal() { 
+      itemModal.classList.remove('active');
       itemDepartment.disabled = false;
     }
-    closeModalBtn.addEventListener('click', closeModal);
-    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    closeModalBtn.addEventListener('click', closeItemModal);
+    itemModal.addEventListener('click', (e) => { if (e.target === itemModal) closeItemModal(); });
 
     itemForm.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -1156,11 +1376,11 @@
         return;
       }
       if (id) {
-        updateItem(parseInt(id), code, name, category, department, quantity, cost, responsible, condition, alertLevel);
+        updateItem(id, code, name, category, department, quantity, cost, responsible, condition, alertLevel);
       } else {
         addItem(code, name, category, department, quantity, cost, responsible, condition, alertLevel);
       }
-      closeModal();
+      closeItemModal();
     });
 
     deptContainer.addEventListener('click', (e) => {
@@ -1170,12 +1390,21 @@
       if (target.classList.contains('edit-item')) {
         const id = target.dataset.id;
         if (!id) return;
-        const item = inventory.find(i => i.id === parseInt(id));
+        const item = inventory.find(i => i.id === id);
         if (!item) return;
+        
+        // Admin cannot edit
+        if (isAdmin) {
+          showToast('❌ Admin cannot edit items!', 'fa-circle-exclamation', true);
+          return;
+        }
+        
+        // Department staff can only edit their own department
         if (item.department !== currentUser) {
           showToast('❌ You can only edit items in your own department!', 'fa-circle-exclamation', true);
           return;
         }
+        
         modalTitle.textContent = 'Edit item';
         itemIdField.value = item.id;
         itemCode.value = item.code;
@@ -1188,7 +1417,7 @@
         itemResponsible.value = item.responsible;
         itemCondition.value = item.condition;
         itemAlertLevel.value = item.alertLevel || 10;
-        modal.classList.add('active');
+        itemModal.classList.add('active');
         return;
       }
       
@@ -1197,7 +1426,7 @@
         if (!deleteBtn) return;
         const id = deleteBtn.dataset.id;
         if (!id) return;
-        deleteItem(parseInt(id));
+        deleteItem(id);
         return;
       }
     });
@@ -1214,7 +1443,10 @@
     });
 
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && modal.classList.contains('active')) closeModal();
+      if (e.key === 'Escape') {
+        if (itemModal.classList.contains('active')) closeItemModal();
+        if (changePasswordModal.classList.contains('active')) closeChangePassword();
+      }
     });
 
     // ==================== INIT ====================
