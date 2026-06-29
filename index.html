@@ -7,10 +7,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
   
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <!-- No need for extra Firebase SDK scripts here (we use import maps in script) -->
   
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -698,18 +695,38 @@
 <!-- ==================== TOAST ==================== -->
 <div class="toast" id="toast"><i class="fas fa-check-circle"></i> <span id="toastMessage">Item saved</span></div>
 
-<script type="module">
-  (function() {
-    // ============================================================
-    // 🔴 STEP 1: PASTE YOUR FIREBASE CONFIG KEYS BELOW 🔴
-    // ============================================================
-   
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
+<!-- ==================== Use Import Map for Firebase ==================== -->
+<script type="importmap">
+  {
+    "imports": {
+      "firebase/app": "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js",
+      "firebase/firestore": "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js",
+      "firebase/auth": "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js"
+    }
+  }
+</script>
 
-  // Your web app's Firebase configuration
+<script type="module">
+  import { initializeApp } from "firebase/app";
+  import { 
+    getFirestore, 
+    collection, 
+    onSnapshot, 
+    addDoc, 
+    updateDoc, 
+    deleteDoc, 
+    doc 
+  } from "firebase/firestore";
+  import { 
+    getAuth, 
+    signInWithEmailAndPassword, 
+    signOut,
+    onAuthStateChanged 
+  } from "firebase/auth";
+
+  // ============================================================
+  // 🔴 YOUR FIREBASE CONFIG KEYS (Copied from your code) 🔴
+  // ============================================================
   const firebaseConfig = {
     apiKey: "AIzaSyD_7sKO-UPdel3tYDB8wWO7W2MjBFMYpq0",
     authDomain: "dhims-bc79f.firebaseapp.com",
@@ -721,177 +738,584 @@
 
   // Initialize Firebase
   const app = initializeApp(firebaseConfig);
-</script>
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+
+  // ==================== STATE ====================
+  let currentUser = null;
+  let isAdmin = false;
+  let inventory = [];
+  let unsubscribe = null;
+
+  // DOM refs
+  const loginPage = document.getElementById('loginPage');
+  const dashboard = document.getElementById('dashboard');
+  const loginForm = document.getElementById('loginForm');
+  const loginEmail = document.getElementById('loginEmail');
+  const loginPassword = document.getElementById('loginPassword');
+  const loginError = document.getElementById('loginError');
+  const userBadge = document.getElementById('userBadge');
+  const logoutBtn = document.getElementById('logoutBtn');
+  const deptContainer = document.getElementById('departmentContainer');
+  const totalSpan = document.getElementById('totalItems');
+  const lowSpan = document.getElementById('lowItems');
+  const searchInput = document.getElementById('searchInput');
+  const categoryFilter = document.getElementById('categoryFilter');
+  const stockFilter = document.getElementById('stockFilter');
+  const resetFilterBtn = document.getElementById('resetFilterBtn');
+
+  const itemModal = document.getElementById('itemModal');
+  const modalTitle = document.getElementById('modalTitle');
+  const itemIdField = document.getElementById('itemIdField');
+  const itemCode = document.getElementById('itemCode');
+  const itemName = document.getElementById('itemName');
+  const itemCategory = document.getElementById('itemCategory');
+  const itemDepartment = document.getElementById('itemDepartment');
+  const itemQuantity = document.getElementById('itemQuantity');
+  const itemCost = document.getElementById('itemCost');
+  const itemResponsible = document.getElementById('itemResponsible');
+  const itemCondition = document.getElementById('itemCondition');
+  const itemAlertLevel = document.getElementById('itemAlertLevel');
+  const closeModalBtn = document.getElementById('closeModalBtn');
+  const openAddBtn = document.getElementById('openAddModal');
+  const itemForm = document.getElementById('itemForm');
+
+  const toast = document.getElementById('toast');
+  const toastMsg = document.getElementById('toastMessage');
+  let toastTimer = null;
+
+  // ==================== UTILITY FUNCTIONS ====================
+  function showToast(text, icon = 'fa-check-circle', isError = false) {
+    toastMsg.textContent = text;
+    toast.querySelector('i').className = `fas ${icon}`;
+    toast.classList.remove('error');
+    if (isError) toast.classList.add('error');
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('show'), 2700);
+  }
+
+  function getStockStatus(qty, alertLevel) {
+    if (alertLevel === undefined || alertLevel === null) alertLevel = 10;
+    if (qty <= Math.floor(alertLevel * 0.3)) return 'critical';
+    if (qty < alertLevel) return 'low';
+    return 'ok';
+  }
+
+  function statusLabel(qty, alertLevel) {
+    const status = getStockStatus(qty, alertLevel);
+    if (status === 'ok') return '<span class="stock-badge stock-ok">In stock</span>';
+    if (status === 'low') return '<span class="stock-badge stock-low">Low stock</span>';
+    return '<span class="stock-badge stock-critical">Critical</span>';
+  }
+
+  function conditionLabel(condition) {
+    const map = {
+      'New': 'condition-new',
+      'Good': 'condition-good',
+      'Fair': 'condition-fair',
+      'Poor': 'condition-poor',
+      'Repair': 'condition-repair'
     };
-    // ============================================================
+    const cls = map[condition] || 'condition-good';
+    return `<span class="condition-badge ${cls}">${condition}</span>`;
+  }
 
-   
-    const db = firebase.firestore();
-    const auth = firebase.auth();
-
-    // ==================== STATE ====================
-    let currentUser = null;
-    let isAdmin = false;
-    let inventory = [];
-    let unsubscribe = null;
-
-    // DOM refs
-    const loginPage = document.getElementById('loginPage');
-    const dashboard = document.getElementById('dashboard');
-    const loginForm = document.getElementById('loginForm');
-    const loginEmail = document.getElementById('loginEmail');
-    const loginPassword = document.getElementById('loginPassword');
-    const loginError = document.getElementById('loginError');
-    const userBadge = document.getElementById('userBadge');
-    const logoutBtn = document.getElementById('logoutBtn');
-    const deptContainer = document.getElementById('departmentContainer');
-    const totalSpan = document.getElementById('totalItems');
-    const lowSpan = document.getElementById('lowItems');
-    const searchInput = document.getElementById('searchInput');
-    const categoryFilter = document.getElementById('categoryFilter');
-    const stockFilter = document.getElementById('stockFilter');
-    const resetFilterBtn = document.getElementById('resetFilterBtn');
-
-    const itemModal = document.getElementById('itemModal');
-    const modalTitle = document.getElementById('modalTitle');
-    const itemIdField = document.getElementById('itemIdField');
-    const itemCode = document.getElementById('itemCode');
-    const itemName = document.getElementById('itemName');
-    const itemCategory = document.getElementById('itemCategory');
-    const itemDepartment = document.getElementById('itemDepartment');
-    const itemQuantity = document.getElementById('itemQuantity');
-    const itemCost = document.getElementById('itemCost');
-    const itemResponsible = document.getElementById('itemResponsible');
-    const itemCondition = document.getElementById('itemCondition');
-    const itemAlertLevel = document.getElementById('itemAlertLevel');
-    const closeModalBtn = document.getElementById('closeModalBtn');
-    const openAddBtn = document.getElementById('openAddModal');
-    const itemForm = document.getElementById('itemForm');
-
-    const toast = document.getElementById('toast');
-    const toastMsg = document.getElementById('toastMessage');
-    let toastTimer = null;
-
-    // ==================== UTILITY FUNCTIONS ====================
-    function showToast(text, icon = 'fa-check-circle', isError = false) {
-      toastMsg.textContent = text;
-      toast.querySelector('i').className = `fas ${icon}`;
-      toast.classList.remove('error');
-      if (isError) toast.classList.add('error');
-      toast.classList.add('show');
-      clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => toast.classList.remove('show'), 2700);
+  // ==================== FIREBASE DATA FUNCTIONS ====================
+  
+  function loadDataFromFirebase() {
+    if (unsubscribe) {
+      unsubscribe();
     }
-
-    function getStockStatus(qty, alertLevel) {
-      if (alertLevel === undefined || alertLevel === null) alertLevel = 10;
-      if (qty <= Math.floor(alertLevel * 0.3)) return 'critical';
-      if (qty < alertLevel) return 'low';
-      return 'ok';
-    }
-
-    function statusLabel(qty, alertLevel) {
-      const status = getStockStatus(qty, alertLevel);
-      if (status === 'ok') return '<span class="stock-badge stock-ok">In stock</span>';
-      if (status === 'low') return '<span class="stock-badge stock-low">Low stock</span>';
-      return '<span class="stock-badge stock-critical">Critical</span>';
-    }
-
-    function conditionLabel(condition) {
-      const map = {
-        'New': 'condition-new',
-        'Good': 'condition-good',
-        'Fair': 'condition-fair',
-        'Poor': 'condition-poor',
-        'Repair': 'condition-repair'
-      };
-      const cls = map[condition] || 'condition-good';
-      return `<span class="condition-badge ${cls}">${condition}</span>`;
-    }
-
-    // ==================== FIREBASE DATA FUNCTIONS ====================
     
-    function loadDataFromFirebase() {
-      if (unsubscribe) {
-        unsubscribe();
-      }
+    const q = collection(db, "inventory");
+    unsubscribe = onSnapshot(q, (snapshot) => {
+      inventory = [];
+      snapshot.forEach((doc) => {
+        inventory.push({
+          id: doc.id,
+          ...doc.data()
+        });
+      });
       
-      unsubscribe = db.collection("inventory")
-        .onSnapshot((snapshot) => {
-          inventory = [];
-          snapshot.forEach((doc) => {
-            inventory.push({
-              id: doc.id,
-              ...doc.data()
-            });
-          });
-          
-          if (currentUser) {
-            render();
-          }
-        }, (error) => {
-          console.error("Error loading data:", error);
-          showToast("❌ Error loading data from server", 'fa-circle-exclamation', true);
-        });
-    }
-
-    async function addItemToFirebase(item) {
-      try {
-        await db.collection("inventory").add({
-          code: item.code,
-          name: item.name,
-          category: item.category,
-          department: item.department,
-          quantity: Number(item.quantity),
-          cost: Number(item.cost),
-          responsible: item.responsible,
-          condition: item.condition,
-          alertLevel: Number(item.alertLevel)
-        });
-        showToast(`➕ ${item.name} (${item.code}) added to ${item.department}`, 'fa-circle-plus');
-      } catch (error) {
-        console.error("Error adding item:", error);
-        showToast("❌ Failed to add item", 'fa-circle-exclamation', true);
+      if (currentUser) {
+        render();
       }
+    }, (error) => {
+      console.error("Error loading data:", error);
+      showToast("❌ Error loading data from server", 'fa-circle-exclamation', true);
+    });
+  }
+
+  async function addItemToFirebase(item) {
+    try {
+      await addDoc(collection(db, "inventory"), {
+        code: item.code,
+        name: item.name,
+        category: item.category,
+        department: item.department,
+        quantity: Number(item.quantity),
+        cost: Number(item.cost),
+        responsible: item.responsible,
+        condition: item.condition,
+        alertLevel: Number(item.alertLevel)
+      });
+      showToast(`➕ ${item.name} (${item.code}) added to ${item.department}`, 'fa-circle-plus');
+    } catch (error) {
+      console.error("Error adding item:", error);
+      showToast("❌ Failed to add item", 'fa-circle-exclamation', true);
+    }
+  }
+
+  async function updateItemInFirebase(id, item) {
+    try {
+      const docRef = doc(db, "inventory", id);
+      await updateDoc(docRef, {
+        code: item.code,
+        name: item.name,
+        category: item.category,
+        department: item.department,
+        quantity: Number(item.quantity),
+        cost: Number(item.cost),
+        responsible: item.responsible,
+        condition: item.condition,
+        alertLevel: Number(item.alertLevel)
+      });
+      showToast(`✏️ ${item.name} updated`, 'fa-pen-to-square');
+    } catch (error) {
+      console.error("Error updating item:", error);
+      showToast("❌ Failed to update item", 'fa-circle-exclamation', true);
+    }
+  }
+
+  async function deleteItemFromFirebase(id) {
+    try {
+      const docRef = doc(db, "inventory", id);
+      await deleteDoc(docRef);
+      showToast(`🗑️ Item removed successfully`, 'fa-trash-can');
+    } catch (error) {
+      console.error("Error deleting item:", error);
+      showToast("❌ Failed to delete item", 'fa-circle-exclamation', true);
+    }
+  }
+
+  // ==================== LOGIN / LOGOUT ====================
+  function login(user, department) {
+    currentUser = department;
+    isAdmin = (department === 'Admin');
+    loginPage.style.display = 'none';
+    dashboard.classList.add('active');
+    
+    if (isAdmin) {
+      userBadge.className = 'admin-badge';
+      userBadge.textContent = '👑 Admin (View Only)';
+      document.querySelector('.actions').style.display = 'none';
+    } else {
+      userBadge.className = 'user-badge';
+      userBadge.textContent = department;
+      document.querySelector('.actions').style.display = 'flex';
+    }
+    
+    loadDataFromFirebase();
+    showToast(`✅ Logged in as ${isAdmin ? 'Admin (View Only)' : department}`, 'fa-check-circle');
+  }
+
+  function logout() {
+    currentUser = null;
+    isAdmin = false;
+    if (unsubscribe) {
+      unsubscribe();
+      unsubscribe = null;
+    }
+    loginPage.style.display = 'block';
+    dashboard.classList.remove('active');
+    loginForm.reset();
+    loginError.style.display = 'none';
+    showToast('👋 Logged out successfully', 'fa-sign-out-alt');
+  }
+
+  // Login form submit
+  loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = loginEmail.value.trim();
+    const password = loginPassword.value.trim();
+
+    if (!email || !password) {
+      loginError.textContent = 'Please enter both email and password.';
+      loginError.style.display = 'block';
+      return;
     }
 
-    async function updateItemInFirebase(id, item) {
-      try {
-        await db.collection("inventory").doc(id).update({
-          code: item.code,
-          name: item.name,
-          category: item.category,
-          department: item.department,
-          quantity: Number(item.quantity),
-          cost: Number(item.cost),
-          responsible: item.responsible,
-          condition: item.condition,
-          alertLevel: Number(item.alertLevel)
-        });
-        showToast(`✏️ ${item.name} updated`, 'fa-pen-to-square');
-      } catch (error) {
-        console.error("Error updating item:", error);
-        showToast("❌ Failed to update item", 'fa-circle-exclamation', true);
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      
+      // Determine department from email (for demo purposes)
+      let department = 'Admin';
+      if (email.includes('emergency')) department = 'Emergency';
+      else if (email.includes('icu')) department = 'ICU';
+      else if (email.includes('pharmacy')) department = 'Pharmacy';
+      else if (email.includes('laboratory')) department = 'Laboratory';
+      else if (email.includes('radiology')) department = 'Radiology';
+      else if (email.includes('ward')) department = 'Ward';
+      else if (email.includes('surgery')) department = 'Surgery';
+      else if (email.includes('insurance')) department = 'Insurance/SSU';
+      else if (email.includes('cash')) department = 'Cash';
+      else if (email.includes('opd')) department = 'OPD';
+      else if (email.includes('ipd')) department = 'IPD';
+      else if (email.includes('collection')) department = 'Collection';
+      else if (email.includes('hemodialysis')) department = 'Hemodialysis';
+      else if (email.includes('store')) department = 'Store';
+      
+      loginError.style.display = 'none';
+      login(user, department);
+    } catch (error) {
+      loginError.textContent = '❌ ' + error.message;
+      loginError.style.display = 'block';
+      console.error("Login error:", error);
+    }
+  });
+
+  logoutBtn.addEventListener('click', () => {
+    signOut(auth).then(() => {
+      logout();
+    }).catch((error) => {
+      console.error("Logout error:", error);
+      showToast("❌ Error logging out", 'fa-circle-exclamation', true);
+    });
+  });
+
+  // ==================== RENDER ====================
+  function render() {
+    if (!currentUser) return;
+
+    const searchTerm = searchInput.value.toLowerCase().trim();
+    const category = categoryFilter.value;
+    const stock = stockFilter.value;
+
+    let filteredItems = inventory.filter(item => {
+      if (!isAdmin && item.department !== currentUser) return false;
+      
+      if (searchTerm) {
+        const match = item.name.toLowerCase().includes(searchTerm) ||
+                       item.category.toLowerCase().includes(searchTerm) ||
+                       item.code.toLowerCase().includes(searchTerm) ||
+                       item.responsible.toLowerCase().includes(searchTerm);
+        if (!match) return false;
       }
-    }
-
-    async function deleteItemFromFirebase(id) {
-      try {
-        await db.collection("inventory").doc(id).delete();
-        showToast(`🗑️ Item removed successfully`, 'fa-trash-can');
-      } catch (error) {
-        console.error("Error deleting item:", error);
-        showToast("❌ Failed to delete item", 'fa-circle-exclamation', true);
+      if (category !== 'all' && item.category !== category) return false;
+      if (stock !== 'all') {
+        const status = getStockStatus(item.quantity, item.alertLevel);
+        if (stock === 'ok' && status !== 'ok') return false;
+        if (stock === 'low' && status !== 'low') return false;
+        if (stock === 'critical' && status !== 'critical') return false;
       }
+      return true;
+    });
+
+    const visibleItems = isAdmin ? inventory : inventory.filter(i => i.department === currentUser);
+    totalSpan.textContent = visibleItems.length;
+    const lowCount = visibleItems.filter(i => {
+      const s = getStockStatus(i.quantity, i.alertLevel);
+      return s === 'low' || s === 'critical';
+    }).length;
+    lowSpan.textContent = lowCount;
+
+    const departments = {};
+    filteredItems.forEach(item => {
+      if (!departments[item.department]) {
+        departments[item.department] = [];
+      }
+      departments[item.department].push(item);
+    });
+
+    const deptNames = Object.keys(departments).sort();
+
+    if (deptNames.length === 0) {
+      deptContainer.innerHTML = `
+        <div style="text-align:center; padding: 60px 20px; color:#94a3b8;">
+          <i class="fas fa-box-open" style="font-size:48px; margin-bottom:16px; display:block;"></i>
+          No items found${!isAdmin ? ` in ${currentUser} department` : ''}
+        </div>
+      `;
+      document.getElementById('updateTime').textContent = new Date().toLocaleTimeString();
+      return;
     }
 
-    // ==================== LOGIN / LOGOUT ====================
-    function login(user, department) {
-      currentUser = department;
-      isAdmin = (department === 'Admin');
-      loginPage.style.display = 'none';
-      dashboard.classList.add('active');
+    let html = '';
+    deptNames.forEach(dept => {
+      const items = departments[dept];
+      const deptTotal = items.length;
+      const deptLow = items.filter(i => {
+        const s = getStockStatus(i.quantity, i.alertLevel);
+        return s === 'low' || s === 'critical';
+      }).length;
+
+      const deptIcon = 'fa-building';
+
+      html += `
+        <div class="dept-section">
+          <div class="dept-header">
+            <h2><i class="fas ${deptIcon}"></i> ${dept}</h2>
+            <div class="dept-stats">
+              <span class="count"><i class="fas fa-boxes"></i> ${deptTotal} items</span>
+              ${deptLow > 0 ? `<span class="low"><i class="fas fa-triangle-exclamation"></i> ${deptLow} low</span>` : ''}
+            </div>
+          </div>
+          <div class="dept-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Item</th>
+                  <th>Category</th>
+                  <th>Quantity</th>
+                  <th>Cost</th>
+                  <th>Responsible</th>
+                  <th>Condition</th>
+                  <th>Alert Level</th>
+                  <th>Status</th>
+                  <th style="text-align:center;">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+      `;
+
+      items.forEach(item => {
+        const statusHtml = statusLabel(item.quantity, item.alertLevel);
+        const conditionHtml = conditionLabel(item.condition);
+        
+        const actionButtons = isAdmin ? '' : `
+          <div class="action-icons">
+            <i class="fas fa-pen-to-square edit-item" data-id="${item.id}" title="Edit" style="font-size:18px;"></i>
+            <button class="btn-remove delete-item" data-id="${item.id}">
+              <i class="fas fa-trash-can"></i> Remove
+            </button>
+          </div>
+        `;
+        
+        html += `
+          <tr class="item-row">
+            <td><span style="background:#f1f5f9; padding:4px 10px; border-radius:30px; font-weight:500; font-size:12px;">${item.code}</span></td>
+            <td><span class="item-name"><i class="fas fa-cube"></i> ${item.name}</span></td>
+            <td><span style="background:#eef2ff; padding:4px 12px; border-radius:30px; font-weight:500; font-size:13px;">${item.category}</span></td>
+            <td><strong>${item.quantity}</strong></td>
+            <td>₹${item.cost.toFixed(2)}</td>
+            <td><span style="background:#f3e8ff; padding:4px 10px; border-radius:30px; font-weight:500; font-size:12px;">${item.responsible}</span></td>
+            <td>${conditionHtml}</td>
+            <td><span style="background:#f1f5f9; padding:4px 10px; border-radius:30px; font-weight:500; font-size:12px;">below ${item.alertLevel}</span></td>
+            <td>${statusHtml}</td>
+            <td style="text-align:center;">
+              ${actionButtons}
+            </td>
+          </tr>
+        `;
+      });
+
+      html += `
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    });
+
+    deptContainer.innerHTML = html;
+    document.getElementById('updateTime').textContent = new Date().toLocaleTimeString();
+  }
+
+  // ==================== CRUD (Only for non-Admin) ====================
+  function addItem(code, name, category, department, quantity, cost, responsible, condition, alertLevel) {
+    if (isAdmin) {
+      showToast('❌ Admin cannot add items!', 'fa-circle-exclamation', true);
+      return;
+    }
+    
+    if (department !== currentUser) {
+      showToast('❌ You can only add items to your own department!', 'fa-circle-exclamation', true);
+      return;
+    }
+    
+    const newItem = {
+      code,
+      name, 
+      category, 
+      department, 
+      quantity: Number(quantity),
+      cost: Number(cost),
+      responsible,
+      condition,
+      alertLevel: Number(alertLevel)
+    };
+    
+    addItemToFirebase(newItem);
+  }
+
+  function updateItem(id, code, name, category, department, quantity, cost, responsible, condition, alertLevel) {
+    if (isAdmin) {
+      showToast('❌ Admin cannot edit items!', 'fa-circle-exclamation', true);
+      return false;
+    }
+    
+    const item = inventory.find(i => i.id === id);
+    if (!item) return false;
+    
+    if (item.department !== currentUser) {
+      showToast('❌ You can only edit items in your own department!', 'fa-circle-exclamation', true);
+      return false;
+    }
+    
+    const updatedItem = {
+      code,
+      name, 
+      category, 
+      department, 
+      quantity: Number(quantity),
+      cost: Number(cost),
+      responsible,
+      condition,
+      alertLevel: Number(alertLevel)
+    };
+    
+    updateItemInFirebase(id, updatedItem);
+    return true;
+  }
+
+  function deleteItem(id) {
+    if (isAdmin) {
+      showToast('❌ Admin cannot delete items!', 'fa-circle-exclamation', true);
+      return;
+    }
+    
+    const item = inventory.find(i => i.id === id);
+    if (!item) return;
+    
+    if (item.department !== currentUser) {
+      showToast('❌ You can only delete items in your own department!', 'fa-circle-exclamation', true);
+      return;
+    }
+    
+    if (confirm(`Are you sure you want to remove "${item.name}" (${item.code}) from ${item.department}?`)) {
+      deleteItemFromFirebase(id);
+    }
+  }
+
+  // ==================== EVENTS ====================
+  openAddBtn.addEventListener('click', () => {
+    if (isAdmin) {
+      showToast('❌ Admin cannot add items!', 'fa-circle-exclamation', true);
+      return;
+    }
+    
+    modalTitle.textContent = 'Add new item';
+    itemIdField.value = '';
+    itemForm.reset();
+    itemCategory.value = 'Surgical';
+    itemDepartment.value = currentUser;
+    itemDepartment.disabled = true;
+    itemCondition.value = 'New';
+    itemAlertLevel.value = 10;
+    itemModal.classList.add('active');
+  });
+
+  function closeItemModal() { 
+    itemModal.classList.remove('active');
+    itemDepartment.disabled = false;
+  }
+  closeModalBtn.addEventListener('click', closeItemModal);
+  itemModal.addEventListener('click', (e) => { if (e.target === itemModal) closeItemModal(); });
+
+  itemForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const id = itemIdField.value;
+    const code = itemCode.value.trim();
+    const name = itemName.value.trim();
+    const category = itemCategory.value;
+    const department = itemDepartment.value;
+    const quantity = parseInt(itemQuantity.value, 10);
+    const cost = parseFloat(itemCost.value);
+    const responsible = itemResponsible.value.trim();
+    const condition = itemCondition.value;
+    const alertLevel = parseInt(itemAlertLevel.value, 10);
+    
+    if (!code || !name || isNaN(quantity) || quantity < 0 || isNaN(cost) || cost < 0 || !responsible || isNaN(alertLevel) || alertLevel < 1) {
+      showToast('⚠️ Please fill in all fields correctly', 'fa-circle-exclamation', true);
+      return;
+    }
+    if (id) {
+      updateItem(id, code, name, category, department, quantity, cost, responsible, condition, alertLevel);
+    } else {
+      addItem(code, name, category, department, quantity, cost, responsible, condition, alertLevel);
+    }
+    closeItemModal();
+  });
+
+  deptContainer.addEventListener('click', (e) => {
+    const target = e.target.closest('i') || e.target.closest('button');
+    if (!target) return;
+    
+    if (target.classList.contains('edit-item')) {
+      const id = target.dataset.id;
+      if (!id) return;
+      const item = inventory.find(i => i.id === id);
+      if (!item) return;
       
       if (isAdmin) {
-        userBadge.className = 'admin-badge';
-        userBadge
+        showToast('❌ Admin cannot edit items!', 'fa-circle-exclamation', true);
+        return;
+      }
+      
+      if (item.department !== currentUser) {
+        showToast('❌ You can only edit items in your own department!', 'fa-circle-exclamation', true);
+        return;
+      }
+      
+      modalTitle.textContent = 'Edit item';
+      itemIdField.value = item.id;
+      itemCode.value = item.code;
+      itemName.value = item.name;
+      itemCategory.value = item.category;
+      itemDepartment.value = item.department;
+      itemDepartment.disabled = true;
+      itemQuantity.value = item.quantity;
+      itemCost.value = item.cost;
+      itemResponsible.value = item.responsible;
+      itemCondition.value = item.condition;
+      itemAlertLevel.value = item.alertLevel || 10;
+      itemModal.classList.add('active');
+      return;
+    }
+    
+    if (target.classList.contains('delete-item') || target.closest('.delete-item')) {
+      const deleteBtn = target.closest('.delete-item');
+      if (!deleteBtn) return;
+      const id = deleteBtn.dataset.id;
+      if (!id) return;
+      deleteItem(id);
+      return;
+    }
+  });
+
+  searchInput.addEventListener('input', render);
+  categoryFilter.addEventListener('change', render);
+  stockFilter.addEventListener('change', render);
+  resetFilterBtn.addEventListener('click', () => {
+    searchInput.value = '';
+    categoryFilter.value = 'all';
+    stockFilter.value = 'all';
+    render();
+    showToast('Filters reset', 'fa-rotate-left');
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (itemModal.classList.contains('active')) closeItemModal();
+    }
+  });
+
+  // ==================== INIT ====================
+  loginPage.style.display = 'block';
+  dashboard.classList.remove('active');
+</script>
+</body>
+</html>
